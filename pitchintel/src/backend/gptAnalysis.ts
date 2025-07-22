@@ -1,32 +1,32 @@
-import OpenAI from 'openai';
-
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-});
+import { OpenAIClient } from "./openaiClient";
 
 export async function analyzeSlide(slideText: string) {
-    const prompt = `
-Act like a critical VC investor. Given the content of this slide:
+  const prompt = `As a critical VC, analyze this slide:
 
 "${slideText}"
 
-Output a JSON object with:
-- credibility_score: 0–100 (how believable is this slide?)
-- weaknesses: array of short descriptions of weak/missing arguments
-- flags: array of claims that need more validation`;
+Return JSON:
+{
+"credibility_score": 0-100,
+"weaknesses": ["weakness1", "weakness2"],
+"flags": ["flag1", "flag2"]
+}`;
 
-    const response = await openai.chat.completions.create({
-        model: "gpt-4",
-        messages: [{ role: "user", content: prompt }],
+  try {
+    const client = OpenAIClient.getInstance();
+    const result = await client.createChatCompletion(
+      [{ role: "user", content: prompt }],
+      {
+        model: "gpt-4o-mini", // Use cost-optimized model
         temperature: 0.7,
-    });
+        maxTokens: 1000,
+      }
+    );
 
-    try {
-        const rawText = response.choices[0].message?.content;
-        const json = JSON.parse(rawText || "{}");
-        return json;
-    } catch (err) {
-        console.error("Error parsing GPT response:", err);
-        return null;
-    }
+    const json = JSON.parse(result.content || "{}");
+    return { ...json, tokensUsed: result.tokensUsed, cost: result.cost };
+  } catch (err) {
+    console.error("Error analyzing slide:", err);
+    return null;
+  }
 }

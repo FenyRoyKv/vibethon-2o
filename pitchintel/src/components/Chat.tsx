@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { conversationStorage } from "../utils/conversationStorage";
 
 type Message = { role: "user" | "vc"; content: string };
 
@@ -17,6 +18,7 @@ export function Chat({ vc, slideAnalysis }: ChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [conversationId, setConversationId] = useState<string | null>(null);
 
   useEffect(() => {
     // Ask first question when chat initializes
@@ -25,47 +27,83 @@ export function Chat({ vc, slideAnalysis }: ChatProps) {
     }
   }, []);
 
+  // Save conversation to localStorage whenever messages change
+  useEffect(() => {
+    if (conversationId && messages.length > 0) {
+      conversationStorage.saveConversation(
+        conversationId,
+        vc.name,
+        messages,
+        vc.systemPrompt
+      );
+    }
+  }, [conversationId, messages, vc.name, vc.systemPrompt]);
+
   const askNextQuestion = async (history: Message[]) => {
     setLoading(true);
-    
-    // Create context-aware system prompt
-    const contextualSystemPrompt = slideAnalysis 
+
+    // Create context-aware system prompt that includes slide analysis if available
+    const contextualSystemPrompt = slideAnalysis
       ? `${vc.systemPrompt}\n\nBased on the pitch deck analysis:\n${slideAnalysis}\n\nAsk tough, specific questions about the weaknesses and red flags identified in the analysis.`
       : vc.systemPrompt;
 
-    const prompt = [
-      { role: "system", content: contextualSystemPrompt },
-      ...history.map((m) => ({
-        role: m.role === "user" ? "user" : "assistant",
-        content: m.content,
-      })),
-    ];
+    // For the first message, we don't need to send user messages since there are none yet
+    const messagesToSend =
+      history.length === 0
+        ? []
+        : [
+            ...history.map((m) => ({
+              role: m.role === "user" ? "user" : "assistant",
+              content: m.content,
+            })),
+          ];
 
-    // If this is the first question and we have slide analysis, ask a specific question about the deck
-    if (history.length === 0 && slideAnalysis) {
-      prompt.push({
-        role: "user",
-        content: "I just presented my pitch deck. Based on your analysis, what's your biggest concern about my business?"
+    // If this is the first question and we have slide analysis, add initial context
+    const initialPrompt =
+      history.length === 0 && slideAnalysis
+        ? "I just presented my pitch deck. Based on your analysis, what's your biggest concern about my business?"
+        : undefined;
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messages: messagesToSend,
+          temperature: 0.8,
+          conversationId,
+          systemPrompt: contextualSystemPrompt,
+          initialPrompt,
+        }),
       });
-    }
 
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "gpt-4",
-        messages: prompt,
-        temperature: 0.8,
-      }),
-    });
+      if (!res.ok) {
+        throw new Error(`Chat failed: ${res.statusText}`);
+      }
 
-    const data = await res.json();
-    const content = data.choices?.[0]?.message?.content;
-    if (content) {
-      setMessages([...history, { role: "vc", content }]);
+      const data = await res.json();
+      const content = data.content;
+      const newConversationId = data.conversationId;
+
+      // Set conversation ID if this is a new conversation
+      if (!conversationId && newConversationId) {
+        setConversationId(newConversationId);
+      }
+
+      if (content) {
+        setMessages([...history, { role: "vc", content }]);
+      }
+    } catch (error) {
+      console.error("Chat error:", error);
+      setMessages([
+        ...history,
+        {
+          role: "vc",
+          content: "Sorry, I'm having trouble responding right now.",
+        },
+      ]);
     }
     setLoading(false);
   };
@@ -111,7 +149,7 @@ export function Chat({ vc, slideAnalysis }: ChatProps) {
           onChange={(e) => setInput(e.target.value)}
           className="border rounded p-2 flex-1 text-sm"
           placeholder="Type your response..."
-          onKeyPress={(e) => e.key === 'Enter' && handleSend()}
+          onKeyPress={(e) => e.key === "Enter" && handleSend()}
         />
         <button
           onClick={handleSend}
