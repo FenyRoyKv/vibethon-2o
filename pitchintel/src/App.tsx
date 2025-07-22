@@ -1,35 +1,27 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { Chat } from "./components/Chat";
+import { DeckUploader } from "./components/DeckUploader";
+import { VC_PERSONALITIES } from "./data/vcs";
+import { analyzeSlides } from "./utils/analyzeSlides";
+import { useState } from "react";
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [report, setReport] = useState("");
+
+  const handleExtractedSlides = async (slides: string[]) => {
+    const result = await analyzeSlides(slides);
+    setReport(result);
+  };
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+    <div className="min-h-screen p-10 bg-gray-50">
+      <h1 className="text-2xl font-bold mb-4">Pitch Deck Analyzer</h1>
+      <DeckUploader onExtract={handleExtractedSlides} />
+      <div className="mt-8 whitespace-pre-wrap text-sm font-mono bg-white p-4 rounded shadow">
+        {report || "Upload a deck to get analysis."}
       </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+      {report && <Chat vc={VC_PERSONALITIES.skeptic} />}
+    </div>
+  );
 }
 
-export default App
+export default App;
