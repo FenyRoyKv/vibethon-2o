@@ -10,9 +10,10 @@ if (typeof window !== "undefined") {
 
 interface DeckUploaderProps {
   onExtract: (slides: string[]) => void;
+  onUploadStart?: () => void;
 }
 
-export const DeckUploader: React.FC<DeckUploaderProps> = ({ onExtract }) => {
+export const DeckUploader: React.FC<DeckUploaderProps> = ({ onExtract, onUploadStart }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -95,6 +96,9 @@ export const DeckUploader: React.FC<DeckUploaderProps> = ({ onExtract }) => {
     setError(null);
     setIsProcessing(true);
     setUploadedFile(file);
+    
+    // Notify parent that upload has started
+    onUploadStart?.();
 
     try {
       const extractedTexts = await extractTextFromPDF(file);

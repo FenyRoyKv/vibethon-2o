@@ -8,13 +8,18 @@ type VC = {
   systemPrompt: string;
 };
 
-export function Chat({ vc }: { vc: VC }) {
+interface ChatProps {
+  vc: VC;
+  slideAnalysis?: string;
+}
+
+export function Chat({ vc, slideAnalysis }: ChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // Ask first question
+    // Ask first question when chat initializes
     if (messages.length === 0) {
       askNextQuestion([]);
     }
@@ -22,13 +27,27 @@ export function Chat({ vc }: { vc: VC }) {
 
   const askNextQuestion = async (history: Message[]) => {
     setLoading(true);
+    
+    // Create context-aware system prompt
+    const contextualSystemPrompt = slideAnalysis 
+      ? `${vc.systemPrompt}\n\nBased on the pitch deck analysis:\n${slideAnalysis}\n\nAsk tough, specific questions about the weaknesses and red flags identified in the analysis.`
+      : vc.systemPrompt;
+
     const prompt = [
-      { role: "system", content: vc.systemPrompt },
+      { role: "system", content: contextualSystemPrompt },
       ...history.map((m) => ({
         role: m.role === "user" ? "user" : "assistant",
         content: m.content,
       })),
     ];
+
+    // If this is the first question and we have slide analysis, ask a specific question about the deck
+    if (history.length === 0 && slideAnalysis) {
+      prompt.push({
+        role: "user",
+        content: "I just presented my pitch deck. Based on your analysis, what's your biggest concern about my business?"
+      });
+    }
 
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -92,11 +111,12 @@ export function Chat({ vc }: { vc: VC }) {
           onChange={(e) => setInput(e.target.value)}
           className="border rounded p-2 flex-1 text-sm"
           placeholder="Type your response..."
+          onKeyPress={(e) => e.key === 'Enter' && handleSend()}
         />
         <button
           onClick={handleSend}
           disabled={loading}
-          className="bg-black text-white px-4 py-2 text-sm rounded"
+          className="bg-black text-white px-4 py-2 text-sm rounded disabled:opacity-50"
         >
           Send
         </button>
