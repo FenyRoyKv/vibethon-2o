@@ -13,7 +13,10 @@ interface DeckUploaderProps {
   onUploadStart?: () => void;
 }
 
-export const DeckUploader: React.FC<DeckUploaderProps> = ({ onExtract, onUploadStart }) => {
+export const DeckUploader: React.FC<DeckUploaderProps> = ({
+  onExtract,
+  onUploadStart,
+}) => {
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -93,10 +96,16 @@ export const DeckUploader: React.FC<DeckUploaderProps> = ({ onExtract, onUploadS
       return;
     }
 
+    // File size check (50MB limit)
+    if (file.size > 50 * 1024 * 1024) {
+      setError("File size must be less than 50MB");
+      return;
+    }
+
     setError(null);
     setIsProcessing(true);
     setUploadedFile(file);
-    
+
     // Notify parent that upload has started
     onUploadStart?.();
 
@@ -120,6 +129,7 @@ export const DeckUploader: React.FC<DeckUploaderProps> = ({ onExtract, onUploadS
       }
 
       setError(errorMessage);
+      setUploadedFile(null);
     } finally {
       setIsProcessing(false);
     }
@@ -153,21 +163,38 @@ export const DeckUploader: React.FC<DeckUploaderProps> = ({ onExtract, onUploadS
   };
 
   const handleClick = () => {
-    fileInputRef.current?.click();
+    if (!isProcessing) {
+      fileInputRef.current?.click();
+    }
   };
 
+  const removeFile = () => {
+    setUploadedFile(null);
+    setError(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  if (isProcessing) {
+    return null; // Don't show upload UI during processing
+  }
+
   return (
-    <div className="w-full max-w-2xl mx-auto">
+    <div className="w-full">
       <div
         className={`
-          relative border-2 border-dashed rounded-lg p-8 text-center cursor-pointer
-          transition-all duration-200 ease-in-out
+          relative border-2 border-dashed rounded-lg p-16 text-center cursor-pointer
+          transition-all duration-200 ease-in-out bg-white
           ${
             isDragging
-              ? "border-blue-500 bg-blue-50"
+              ? "border-blue-400 bg-blue-50"
+              : error
+              ? "border-red-300 bg-red-50"
+              : uploadedFile
+              ? "border-green-400 bg-green-50"
               : "border-gray-300 hover:border-gray-400"
           }
-          ${isProcessing ? "pointer-events-none opacity-50" : ""}
         `}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -182,49 +209,50 @@ export const DeckUploader: React.FC<DeckUploaderProps> = ({ onExtract, onUploadS
           className="hidden"
         />
 
-        {isProcessing ? (
-          <div className="flex flex-col items-center space-y-4">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-            <p className="text-gray-600">Processing PDF...</p>
+        <div className="space-y-6">
+          <div>
+            <h3 className="text-xl font-semibold text-gray-900 mb-3">
+              Drag and drop your PDF here
+            </h3>
+            <p className="text-gray-600 mb-6">Or click to browse</p>
+
+            <button className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-6 py-3 rounded-md text-sm font-medium transition-colors">
+              Upload PDF
+            </button>
           </div>
-        ) : (
-          <div className="space-y-4">
-            <svg
-              className="mx-auto h-12 w-12 text-gray-400"
-              stroke="currentColor"
-              fill="none"
-              viewBox="0 0 48 48"
-            >
-              <path
-                d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
-                strokeWidth={2}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
 
-            <div>
-              <p className="text-lg font-medium text-gray-900">
-                {uploadedFile ? "Upload another PDF" : "Upload your PDF"}
-              </p>
-              <p className="text-sm text-gray-500 mt-1">
-                Drag and drop your PDF here, or click to browse
-              </p>
-            </div>
-
-            {uploadedFile && (
-              <div className="bg-green-50 border border-green-200 rounded-md p-3 mt-4">
-                <p className="text-sm text-green-800">
-                  ✓ Uploaded: {uploadedFile.name}
-                </p>
+          {uploadedFile && (
+            <div className="mt-8 p-4 bg-gray-50 rounded-lg max-w-sm mx-auto">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="text-green-500">✓</div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">
+                      {uploadedFile.name}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {(uploadedFile.size / (1024 * 1024)).toFixed(1)} MB
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeFile();
+                  }}
+                  className="text-gray-400 hover:text-gray-600 text-sm font-medium"
+                >
+                  Remove
+                </button>
               </div>
-            )}
-          </div>
-        )}
+            </div>
+          )}
+        </div>
       </div>
 
+      {/* Error Message */}
       {error && (
-        <div className="mt-4 bg-red-50 border border-red-200 rounded-md p-3">
+        <div className="mt-6 bg-red-50 border border-red-200 rounded-lg p-4">
           <p className="text-sm text-red-800">{error}</p>
         </div>
       )}
